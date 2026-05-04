@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Seeding Strategy — Network Analytics</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e17; --surface: #141925; --border: #1e2536;
+    --text: #e4e8f1; --muted: #6b7394;
+    --accent: #22d3ee; --accent-glow: rgba(34,211,238,0.3);
+    --infected: #f43f5e; --infected-glow: rgba(244,63,94,0.4);
+    --seed: #fbbf24; --seed-glow: rgba(251,191,36,0.4);
+    --susceptible: #334155; --edge: #1e293b;
+    --success: #10b981;
+    --community-a: #6366f1; --community-b: #f97316; --community-c: #10b981; --community-d: #ec4899;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; min-height: 100vh; min-height: 100dvh; overflow-x: hidden; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  .container { max-width: 540px; margin: 0 auto; padding: 12px 16px 40px; }
+  button { font-family: 'JetBrains Mono', monospace; cursor: pointer; transition: transform 0.1s; }
+  button:active { transform: scale(0.97); }
+
+  .btn-primary { background: linear-gradient(135deg, var(--accent), #06b6d4); color: #000; border: none; border-radius: 12px; padding: 14px 36px; font-size: 16px; font-weight: 700; letter-spacing: 1px; box-shadow: 0 4px 24px var(--accent-glow); }
+  .btn-action { background: linear-gradient(135deg, var(--accent), #06b6d4); color: #000; border: none; border-radius: 10px; padding: 10px 20px; font-size: 14px; font-weight: 700; box-shadow: 0 4px 16px var(--accent-glow); }
+  .btn-action.disabled { background: var(--surface); color: var(--muted); box-shadow: none; border: 1px solid var(--border); pointer-events: none; }
+  .btn-ghost { background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 10px; padding: 10px 16px; font-size: 13px; }
+  .btn-link { background: none; border: none; color: var(--muted); font-size: 11px; text-decoration: underline; opacity: 0.6; cursor: pointer; }
+  .btn-retry { background: rgba(251,191,36,0.1); color: var(--seed); border: 1px solid rgba(251,191,36,0.25); border-radius: 10px; padding: 10px 16px; font-size: 13px; font-weight: 600; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .network-frame { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 4px; margin-bottom: 10px; }
+  .network-frame svg { display: block; width: 100%; height: auto; }
+
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 4px; }
+  .round-badge { display: inline-flex; align-items: center; gap: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; font-size: 11px; color: var(--accent); font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+  .budget-display { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; }
+  .budget-display .coins { color: var(--seed); }
+
+  .info-bar { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+  .info-chip { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 4px 10px; font-size: 11px; color: var(--muted); }
+  .info-chip strong { color: var(--text); }
+  .info-chip.warn { border-color: rgba(251,191,36,0.3); color: var(--seed); }
+
+  .best-banner { background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.2); border-radius: 8px; padding: 6px 12px; font-size: 12px; color: var(--seed); text-align: center; margin-bottom: 8px; font-weight: 600; }
+
+  .controls { display: flex; flex-direction: column; gap: 8px; }
+  .controls-row { display: flex; gap: 8px; }
+  .hint { color: var(--muted); font-size: 12px; text-align: center; line-height: 1.4; }
+
+  .result-card { border-radius: 12px; padding: 16px; text-align: center; margin-bottom: 10px; }
+  .result-card.great { background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.3); }
+  .result-card.good { background: rgba(34,211,238,0.1); border: 1px solid rgba(34,211,238,0.3); }
+  .result-card.low { background: rgba(244,63,94,0.1); border: 1px solid rgba(244,63,94,0.3); }
+  .result-score { font-size: 32px; font-weight: 700; }
+  .result-score span { font-size: 16px; color: var(--muted); }
+  .result-detail { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .result-verdict { font-size: 14px; font-weight: 600; margin-top: 6px; }
+
+  .round-summary .row { display: flex; justify-content: space-between; align-items: center; padding: 6px 10px; border-radius: 8px; margin-bottom: 4px; font-size: 13px; }
+  .round-summary .row.active { background: rgba(34,211,238,0.08); }
+  .round-summary .rnum { color: var(--muted); width: 70px; }
+  .round-summary .rmodel { color: var(--text); flex: 1; }
+  .round-summary .rscore { color: var(--accent); font-weight: 700; width: 50px; text-align: right; }
+
+  .lb-entry { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; margin-bottom: 4px; border-radius: 8px; border: 1px solid transparent; }
+  .lb-entry.gold { background: rgba(251,191,36,0.08); border-color: rgba(251,191,36,0.2); }
+  .lb-entry .rank { font-weight: 700; font-size: 14px; width: 28px; }
+  .lb-entry .rank.top { color: var(--seed); }
+  .lb-entry .rank.other { color: var(--muted); }
+  .lb-entry .score { color: var(--accent); font-weight: 700; font-size: 15px; }
+
+  .name-row { display: flex; gap: 8px; margin-bottom: 8px; }
+  .name-input { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; color: var(--text); font-size: 14px; outline: none; caret-color: var(--accent); font-family: 'Inter', system-ui; }
+  .name-input::placeholder { color: var(--muted); }
+
+  .takeaway { margin-top: 16px; }
+  .takeaway h4 { color: var(--accent); font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 10px; }
+  .takeaway-item { padding: 10px 14px; border-left: 3px solid var(--accent); margin-bottom: 8px; font-size: 13px; line-height: 1.6; color: var(--muted); }
+  .takeaway-item strong { color: var(--text); }
+  .takeaway-item .tnum { color: var(--accent); font-weight: 700; font-size: 11px; text-transform: uppercase; margin-bottom: 2px; display: block; }
+
+  .discussion ul { color: var(--muted); font-size: 13px; line-height: 1.7; padding-left: 18px; }
+  .discussion strong { color: var(--text); }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .fade-in { animation: fadeIn 0.3s ease; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+// ═══════════════════════════════════════════════════════════════
+// RNG
+// ═══════════════════════════════════════════════════════════════
+function mulberry32(a) {
+  return function() {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// NETWORK — 50 nodes, 4 communities (departments)
+// ═══════════════════════════════════════════════════════════════
+function generateNetwork(seed) {
+  const rng = mulberry32(seed);
+  const N = 50;
+  const nodes = [];
+  const edgeSet = new Set();
+
+  const communities = [
+    { cx: 120, cy: 100, count: 14, color: 'var(--community-a)', label: 'Engineering' },
+    { cx: 320, cy: 100, count: 12, color: 'var(--community-b)', label: 'Marketing' },
+    { cx: 100, cy: 300, count: 12, color: 'var(--community-c)', label: 'Sales' },
+    { cx: 330, cy: 300, count: 12, color: 'var(--community-d)', label: 'Design' },
+  ];
+
+  let id = 0;
+  communities.forEach((com, ci) => {
+    for (let i = 0; i < com.count; i++) {
+      const angle = (i / com.count) * Math.PI * 2 + rng() * 0.8;
+      const r = 30 + rng() * 50;
+      nodes.push({ id: id++, community: ci, x: com.cx + Math.cos(angle)*r, y: com.cy + Math.sin(angle)*r,
+        degree: 0, betweenness: 0, comColor: com.color, comLabel: com.label });
+    }
+  });
+
+  function addEdge(a, b) {
+    if (a === b) return;
+    const key = `${Math.min(a,b)}-${Math.max(a,b)}`;
+    if (!edgeSet.has(key)) { edgeSet.add(key); nodes[a].degree++; nodes[b].degree++; }
+  }
+
+  // Intra-community
+  for (let ci = 0; ci < communities.length; ci++) {
+    const m = nodes.filter(n => n.community === ci);
+    for (let i = 0; i < m.length; i++) addEdge(m[i].id, m[(i+1)%m.length].id);
+    for (let i = 0; i < m.length; i++)
+      for (let j = i+2; j < m.length; j++)
+        if (rng() < 0.15) addEdge(m[i].id, m[j].id);
+  }
+
+  // Inter-community bridges
+  for (let ci = 0; ci < communities.length; ci++) {
+    for (let cj = ci+1; cj < communities.length; cj++) {
+      const ma = nodes.filter(n => n.community === ci);
+      const mb = nodes.filter(n => n.community === cj);
+      addEdge(ma[Math.floor(rng()*ma.length)].id, mb[Math.floor(rng()*mb.length)].id);
+    }
+  }
+
+  // Sparse hub extras
+  [0, 14, 26, 38].forEach(h => {
+    const others = nodes.filter(n => n.community !== nodes[h].community);
+    addEdge(h, others[Math.floor(rng()*others.length)].id);
+  });
+
+  const edges = [];
+  edgeSet.forEach(k => { const [a,b] = k.split('-').map(Number); edges.push({source:a,target:b}); });
+
+  const adj = Array.from({length:N}, ()=>[]);
+  edges.forEach(e => { adj[e.source].push(e.target); adj[e.target].push(e.source); });
+
+  // Force layout
+  for (let iter = 0; iter < 300; iter++) {
+    for (let i = 0; i < N; i++) {
+      let fx = 0, fy = 0;
+      for (let j = 0; j < N; j++) {
+        if (i===j) continue;
+        const dx = nodes[i].x-nodes[j].x, dy = nodes[i].y-nodes[j].y, d = Math.sqrt(dx*dx+dy*dy)||1;
+        fx += (dx/d)*600/(d*d); fy += (dy/d)*600/(d*d);
+      }
+      for (const j of adj[i]) { fx += (nodes[j].x-nodes[i].x)*0.015; fy += (nodes[j].y-nodes[i].y)*0.015; }
+      const com = communities[nodes[i].community];
+      fx += (com.cx-nodes[i].x)*0.003; fy += (com.cy-nodes[i].y)*0.003;
+      nodes[i].x += fx*0.2; nodes[i].y += fy*0.2;
+    }
+  }
+
+  let minX=Infinity, maxX=-Infinity, minY=Infinity, maxY=-Infinity;
+  nodes.forEach(n => { minX=Math.min(minX,n.x); maxX=Math.max(maxX,n.x); minY=Math.min(minY,n.y); maxY=Math.max(maxY,n.y); });
+  const pad = 24;
+  nodes.forEach(n => {
+    n.x = pad + ((n.x-minX)/(maxX-minX||1))*(420-2*pad);
+    n.y = pad + ((n.y-minY)/(maxY-minY||1))*(380-2*pad);
+  });
+
+  // Betweenness
+  for (let s = 0; s < N; s++) {
+    const dist=Array(N).fill(-1), paths=Array(N).fill(0), stack=[], pred=Array.from({length:N},()=>[]);
+    dist[s]=0; paths[s]=1; const queue=[s];
+    while(queue.length) { const v=queue.shift(); stack.push(v); for(const w of adj[v]) { if(dist[w]<0){dist[w]=dist[v]+1;queue.push(w);} if(dist[w]===dist[v]+1){paths[w]+=paths[v];pred[w].push(v);} } }
+    const dep=Array(N).fill(0);
+    while(stack.length) { const w=stack.pop(); for(const v of pred[w]) dep[v]+=(paths[v]/paths[w])*(1+dep[w]); if(w!==s) nodes[w].betweenness+=dep[w]; }
+  }
+  nodes.forEach(n => n.betweenness/=2);
+
+  return { nodes, edges, adj, N, communities };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DIFFUSION MODELS
+// ═══════════════════════════════════════════════════════════════
+const ROUNDS = [
+  { num:1, emoji:'🎯', title:'Threshold Diffusion', subtitle:'Pure word-of-mouth',
+    modelName:'Linear Threshold Model',
+    modelDesc:'A user adopts when <strong>≥ 45%</strong> of their connections have adopted. No external marketing — growth is purely organic.',
+    hint:'Think about which users can trigger their connections.' },
+  { num:2, emoji:'📺', title:'Threshold + Advertising', subtitle:'The Rossman & Fisher twist',
+    modelName:'Threshold + External Marketing',
+    modelDesc:'Same adoption threshold, but now your company runs <strong>ads</strong>: each non-adopter has a <strong>2% chance per step</strong> of adopting independently. Does targeting influencers still matter?',
+    hint:'With ads running, does seeding hubs still give you an edge?' },
+  { num:3, emoji:'🦠', title:'SIR Viral Spread', subtitle:'Probabilistic contagion',
+    modelName:'SIR Model (β=0.18, γ=0.15)',
+    modelDesc:'Each active user spreads to each connection with <strong>18% probability</strong> per step. Users lose interest (churn) with <strong>15% probability</strong>. Race against churn!',
+    hint:'Users churn fast — spread seeds or cluster them?' },
+];
+
+function runDiffusion(net, seeds, roundIndex) {
+  const N = net.N;
+  const rng = mulberry32(seeds.reduce((a,b) => a*31+b, 7) + roundIndex*1000 + Date.now() % 10000);
+
+  if (roundIndex === 0) {
+    const adopted=Array(N).fill(false), adoptedAt=Array(N).fill(-1);
+    seeds.forEach(s => { adopted[s]=true; adoptedAt[s]=0; });
+    const history=[{step:0,count:seeds.length}];
+    for (let t=1; t<=20; t++) {
+      const nw=[];
+      for (let i=0;i<N;i++) { if(adopted[i]) continue; const nb=net.adj[i]; if(nb.filter(j=>adopted[j]).length>=Math.max(1,Math.ceil(nb.length*0.45))) nw.push(i); }
+      if(!nw.length) break;
+      nw.forEach(i=>{adopted[i]=true;adoptedAt[i]=t;});
+      history.push({step:t,count:adopted.filter(Boolean).length});
+    }
+    return {adopted,adoptedAt,history,total:adopted.filter(Boolean).length,maxStep:history[history.length-1].step};
+  } else if (roundIndex === 1) {
+    const adopted=Array(N).fill(false), adoptedAt=Array(N).fill(-1);
+    seeds.forEach(s => { adopted[s]=true; adoptedAt[s]=0; });
+    const history=[{step:0,count:seeds.length}];
+    for (let t=1; t<=20; t++) {
+      const nw=[];
+      for (let i=0;i<N;i++) { if(adopted[i]) continue; const nb=net.adj[i]; const th=nb.filter(j=>adopted[j]).length>=Math.max(1,Math.ceil(nb.length*0.45)); if(th||rng()<0.02) nw.push(i); }
+      if(!nw.length) break;
+      nw.forEach(i=>{adopted[i]=true;adoptedAt[i]=t;});
+      history.push({step:t,count:adopted.filter(Boolean).length});
+    }
+    return {adopted,adoptedAt,history,total:adopted.filter(Boolean).length,maxStep:history[history.length-1].step};
+  } else {
+    const state=Array(N).fill('S'), adoptedAt=Array(N).fill(-1);
+    seeds.forEach(s=>{state[s]='I';adoptedAt[s]=0;});
+    const history=[{step:0,count:seeds.length}];
+    for (let t=1;t<=25;t++) {
+      const inf=[]; for(let i=0;i<N;i++) if(state[i]==='I') inf.push(i);
+      if(!inf.length) break;
+      const ni=[], nr=[];
+      for(const i of inf) { for(const j of net.adj[i]) if(state[j]==='S'&&rng()<0.18) ni.push(j); if(rng()<0.15) nr.push(i); }
+      ni.forEach(j=>{if(state[j]==='S'){state[j]='I';adoptedAt[j]=t;}});
+      nr.forEach(i=>{state[i]='R';});
+      history.push({step:t,count:state.filter(s=>s!=='S').length});
+    }
+    const adopted=state.map(s=>s!=='S');
+    return {adopted,adoptedAt,history,total:adopted.filter(Boolean).length,maxStep:history[history.length-1].step,state};
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+const NET = generateNetwork(42);
+const BUDGET = 80;
+const COST_MULT = 4;
+const BASE_COST = 8;
+
+let phase = 'intro';
+let currentRound = 0;
+let seeds = [];
+let result = null;
+let animStep = -1;
+let animInterval = null;
+let bestScores = [null, null, null]; // best per round
+let bestSeeds = [null, null, null];
+let currentAttempt = 0; // how many attempts on current round
+let showStats = false;
+let leaderboard = JSON.parse(localStorage.getItem('seeding-lb-v3') || '[]');
+
+function nodeCost(nd) { return BASE_COST + nd.degree * COST_MULT; }
+function budgetUsed() { return seeds.reduce((s,id) => s + nodeCost(NET.nodes[id]), 0); }
+function budgetLeft() { return BUDGET - budgetUsed(); }
+
+// ═══════════════════════════════════════════════════════════════
+// SVG
+// ═══════════════════════════════════════════════════════════════
+function svgEl(tag, attrs) {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const [k,v] of Object.entries(attrs)) el.setAttribute(k, String(v));
+  return el;
+}
+
+function renderNetwork() {
+  const eg = document.getElementById('edgesGroup');
+  const ng = document.getElementById('nodesGroup');
+  if (!eg || !ng) return;
+  eg.innerHTML = ''; ng.innerHTML = '';
+  const isSIR = currentRound === 2;
+
+  NET.edges.forEach(e => {
+    const s=NET.nodes[e.source], t=NET.nodes[e.target];
+    let active = result && result.adoptedAt[e.source]>=0 && result.adoptedAt[e.source]<=animStep
+      && result.adoptedAt[e.target]>=0 && result.adoptedAt[e.target]<=animStep;
+    eg.appendChild(svgEl('line', {x1:s.x,y1:s.y,x2:t.x,y2:t.y,
+      stroke:active?'var(--accent)':'var(--edge)','stroke-width':active?1.5:0.7,opacity:active?0.5:0.3}));
+  });
+
+  NET.nodes.forEach(nd => {
+    const isSeed=seeds.includes(nd.id);
+    const isInf=result&&result.adoptedAt[nd.id]>=0&&result.adoptedAt[nd.id]<=animStep;
+    const isRec=isSIR&&result&&result.state&&result.state[nd.id]==='R'&&isInf;
+    const isActive=isSeed||isInf;
+    const r = 5 + nd.degree*0.7 + (isSeed?2:0);
+
+    let color;
+    if (isSeed) color='var(--seed)';
+    else if (isRec) color='var(--success)';
+    else if (isInf) color='var(--infected)';
+    else if (phase==='select') color = budgetLeft()>=nodeCost(nd) ? nd.comColor : 'var(--susceptible)';
+    else color = nd.comColor+'88';
+
+    const g = svgEl('g', {style: phase==='select'?'cursor:pointer':''});
+
+    if (isActive) {
+      const ring = svgEl('circle', {cx:nd.x,cy:nd.y,r:r+4,fill:'none',
+        stroke:isSeed?'var(--seed-glow)':isRec?'rgba(16,185,129,0.4)':'var(--infected-glow)','stroke-width':2,opacity:0.5});
+      ring.innerHTML = `<animate attributeName="r" values="${r+3};${r+7};${r+3}" dur="2s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0.5;0.15;0.5" dur="2s" repeatCount="indefinite"/>`;
+      g.appendChild(ring);
+    }
+
+    g.appendChild(svgEl('circle', {cx:nd.x,cy:nd.y,r,fill:color,
+      stroke:isActive?color:'rgba(42,51,80,0.5)','stroke-width':isActive?1.5:0.5,
+      filter:isSeed?'url(#glow-seed)':isActive?'url(#glow-inf)':'none'}));
+
+    const txt = svgEl('text', {x:nd.x,y:nd.y+1,'text-anchor':'middle','dominant-baseline':'middle',
+      fill:isActive?'#fff':'#8899bb','font-size':7,'font-weight':isActive?700:400,
+      'font-family':"'JetBrains Mono', monospace",style:'pointer-events:none'});
+    txt.textContent = nd.id;
+    g.appendChild(txt);
+
+    if (phase==='select' && !isSeed) {
+      const cost = nodeCost(nd);
+      const ct = svgEl('text', {x:nd.x,y:nd.y+r+9,'text-anchor':'middle',
+        fill:budgetLeft()>=cost?'var(--seed)':'var(--muted)',
+        'font-size':6,'font-family':"'JetBrains Mono', monospace",opacity:0.7,style:'pointer-events:none'});
+      ct.textContent = cost+'¢';
+      g.appendChild(ct);
+    }
+
+    g.addEventListener('click', () => handleNodeClick(nd.id));
+    g.addEventListener('touchend', ev => { ev.preventDefault(); handleNodeClick(nd.id); });
+    ng.appendChild(g);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// UI
+// ═══════════════════════════════════════════════════════════════
+function esc(s) { const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+
+function render() {
+  const app = document.getElementById('app');
+
+  if (phase === 'intro') {
+    app.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;padding:24px;text-align:center">
+        <div style="font-size:48px;margin-bottom:8px">📱</div>
+        <h1 style="font-size:26px;font-weight:700;letter-spacing:-0.5px;margin:0 0 6px">Seeding Strategy</h1>
+        <div class="mono" style="color:var(--accent);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:3px;margin-bottom:24px">Network Analytics Competition</div>
+        <div class="card" style="max-width:460px;text-align:left;margin-bottom:24px;border-radius:16px;padding:24px">
+          <p style="font-size:15px;line-height:1.6;margin-bottom:14px">
+            <strong style="color:var(--accent)">Scenario:</strong> Your startup is launching a new professional networking app. You have <strong style="color:var(--seed)">80 promotional credits</strong> to give away free premium subscriptions to users in a company network.
+          </p>
+          <p style="font-size:14px;color:var(--muted);line-height:1.6;margin-bottom:14px">
+            The network has <strong style="color:var(--text)">50 employees</strong> across <strong style="color:var(--text)">4 departments</strong>. Well-connected users cost more to acquire. Play <strong style="color:var(--text)">3 rounds</strong> with different adoption models — you can <strong style="color:var(--seed)">replay each round</strong> to improve your strategy.
+          </p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-bottom:12px">
+            <span>🎯 R1: Word-of-mouth</span>
+            <span>📺 R2: + Advertising</span>
+            <span>🦠 R3: Viral / SIR</span>
+          </div>
+          <div style="padding-top:12px;border-top:1px solid var(--border);font-size:13px;color:var(--muted)">
+            <strong style="color:var(--seed)">Cost per user:</strong> <span class="mono" style="color:var(--text)">${BASE_COST} + degree × ${COST_MULT}</span> credits<br>
+            <span style="font-size:12px">Influencers are expensive — is the premium worth it?</span>
+          </div>
+        </div>
+        <button class="btn-primary" onclick="startRound()">START ROUND 1 →</button>
+      </div>`;
+    return;
+  }
+
+  if (phase === 'round-intro') {
+    const rd = ROUNDS[currentRound];
+    app.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;min-height:100dvh;padding:24px;text-align:center" class="fade-in">
+        <div style="font-size:48px;margin-bottom:4px">${rd.emoji}</div>
+        <h3 style="font-size:22px;font-weight:700;margin-bottom:4px">Round ${rd.num}</h3>
+        <div class="mono" style="color:var(--accent);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:2px;margin-bottom:20px">${rd.subtitle}</div>
+        <div class="card" style="max-width:440px;text-align:left;margin-bottom:20px">
+          <div class="mono" style="color:var(--accent);font-weight:700;font-size:13px;margin-bottom:8px">${rd.modelName}</div>
+          <div style="color:var(--muted);font-size:14px;line-height:1.6">${rd.modelDesc}</div>
+        </div>
+        ${bestScores.some(s=>s!==null) ? `
+        <div class="card" style="max-width:440px;width:100%;margin-bottom:16px">
+          <div class="mono" style="color:var(--muted);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Best scores so far</div>
+          ${bestScores.map((s,i) => s!==null ? `
+            <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0">
+              <span style="color:var(--muted)">R${i+1}: ${ROUNDS[i].title}</span>
+              <span class="mono" style="color:var(--accent);font-weight:700">${s}/50</span>
+            </div>` : '').join('')}
+        </div>` : ''}
+        <button class="btn-primary" onclick="beginSelect()">SELECT SEEDS →</button>
+      </div>`;
+    return;
+  }
+
+  if (phase === 'final') {
+    const totalScore = bestScores.reduce((a,b) => a+(b||0), 0);
+    const medals = ['🥇','🥈','🥉'];
+    const sorted = [...leaderboard].sort((a,b) => b.total-a.total || a.ts-b.ts).slice(0,10);
+
+    app.innerHTML = `
+      <div class="container fade-in">
+        <div style="text-align:center;padding:20px 0">
+          <div style="font-size:48px;margin-bottom:4px">🏆</div>
+          <h2 style="font-size:24px;font-weight:700;margin-bottom:4px">Competition Complete</h2>
+          <div class="mono" style="color:var(--accent);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:2px;margin-bottom:16px">Your best scores</div>
+        </div>
+        <div class="card round-summary" style="margin-bottom:12px">
+          ${bestScores.map((s,i) => `
+            <div class="row">
+              <span class="rnum mono">${ROUNDS[i].emoji} R${i+1}</span>
+              <span class="rmodel">${ROUNDS[i].title}</span>
+              <span class="rscore mono">${s||0}/50</span>
+            </div>`).join('')}
+          <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;display:flex;justify-content:space-between;font-weight:700">
+            <span>Total (best)</span>
+            <span class="mono" style="color:var(--accent);font-size:18px">${totalScore}<span style="font-size:12px;color:var(--muted)">/150</span></span>
+          </div>
+        </div>
+        <div class="name-row">
+          <input type="text" class="name-input" id="nameInput" placeholder="Your name" maxlength="20">
+          <button class="btn-action" onclick="submitFinalScore()">Submit</button>
+        </div>
+        <button class="btn-ghost" style="width:100%;margin-bottom:8px" onclick="resetAll()">🔄 Play Again</button>
+        ${sorted.length ? `
+        <div class="card" style="margin-top:12px">
+          <div class="mono" style="font-size:12px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:2px;margin-bottom:12px">Leaderboard</div>
+          ${sorted.map((e,i) => `
+            <div class="lb-entry ${i===0?'gold':''}">
+              <div style="display:flex;align-items:center;gap:10px">
+                <span class="rank ${i<3?'top':'other'} mono">${medals[i]||(i+1)+'.'}</span>
+                <span style="font-size:14px">${esc(e.name)}</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <span class="mono" style="color:var(--muted);font-size:10px">${e.rounds.map((r,j)=>'R'+(j+1)+':'+r).join(' ')}</span>
+                <span class="score mono">${e.total}/150</span>
+              </div>
+            </div>`).join('')}
+          <button class="btn-link" style="display:block;margin:12px auto 0" onclick="clearLB()">Reset leaderboard</button>
+        </div>` : ''}
+
+        <div class="card takeaway" style="margin-top:16px">
+          <h4 class="mono">📋 Key Takeaways</h4>
+          <div class="takeaway-item">
+            <span class="tnum mono">Round 1 — Threshold model</span>
+            In pure word-of-mouth diffusion, <strong>bridge nodes</strong> between communities often outperform hubs within communities. A cascade that stays trapped in one department fails to reach 3/4 of the network. <strong>Seeding across communities is critical.</strong>
+          </div>
+          <div class="takeaway-item">
+            <span class="tnum mono">Round 2 — Advertising effect</span>
+            With even minimal advertising (2%), random nodes start adopting on their own — <strong>collapsing the advantage of targeting hubs</strong>. This is exactly the finding from <strong>Rossman & Fisher (2021)</strong>: external influence makes seeding strategy less important.
+          </div>
+          <div class="takeaway-item">
+            <span class="tnum mono">Round 3 — SIR / Viral</span>
+            When users can <strong>churn</strong> (recover), speed matters more than reach. High-degree seeds infect more neighbors per step, but they also churn. <strong>Spreading seeds across communities</strong> creates multiple independent outbreaks — if one dies, others survive.
+          </div>
+          <div class="takeaway-item">
+            <span class="tnum mono">Budget constraint</span>
+            When influencers are <strong>expensive</strong>, the optimal strategy shifts toward <strong>many cheap bridge nodes</strong> rather than a few expensive hubs. This mirrors real marketing: influencer fees often don't justify the marginal reach over micro-influencers.
+          </div>
+        </div>
+
+        <div class="card discussion" style="margin-top:12px">
+          <div class="mono" style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">💡 Discussion</div>
+          <ul>
+            <li>Did your <strong>strategy change</strong> across rounds? How?</li>
+            <li>In R2, was your R1 strategy still effective?</li>
+            <li>What's the <strong>real-world equivalent</strong> of a bridge node between departments?</li>
+            <li>How would you <strong>measure success</strong> of a seeding campaign?</li>
+          </ul>
+        </div>
+      </div>`;
+    return;
+  }
+
+  // ── Game screen ──
+  const rd = ROUNDS[currentRound];
+  const bl = budgetLeft();
+  const best = bestScores[currentRound];
+
+  app.innerHTML = `
+    <div class="container">
+      <div class="header">
+        <div class="round-badge mono">${rd.emoji} R${rd.num}: ${rd.subtitle}</div>
+        ${phase==='select' ? `<div class="budget-display mono"><span class="coins">💰 ${bl}</span><span style="color:var(--muted);font-size:11px">/ ${BUDGET}</span></div>` : ''}
+        ${phase==='result'&&result ? `<div class="mono" style="color:var(--accent);font-size:16px;font-weight:700">${result.total}/50</div>` : ''}
+      </div>
+      ${best !== null && phase === 'select' ? `<div class="best-banner">⭐ Best so far: ${best}/50 (attempt ${currentAttempt + 1})</div>` : ''}
+      ${phase==='select' ? `
+      <div class="info-bar">
+        <div class="info-chip"><strong>${seeds.length}</strong> seeds</div>
+        <div class="info-chip">Budget: <strong>${bl}</strong>¢</div>
+        ${seeds.length ? `<div class="info-chip warn">Spent: ${budgetUsed()}¢</div>` : ''}
+      </div>` : ''}
+      <div class="network-frame">
+        <svg id="networkSvg" viewBox="0 0 420 380" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <filter id="glow-seed"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            <filter id="glow-inf"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          </defs>
+          <g id="edgesGroup"></g>
+          <g id="nodesGroup"></g>
+        </svg>
+      </div>
+      <div id="controlsArea"></div>
+    </div>`;
+
+  renderNetwork();
+  renderControls();
+}
+
+function renderControls() {
+  const area = document.getElementById('controlsArea');
+  if (!area) return;
+  const rd = ROUNDS[currentRound];
+
+  if (phase === 'select') {
+    const ready = seeds.length > 0 && budgetLeft() >= 0;
+    area.innerHTML = `
+      <div class="controls">
+        <p class="hint">${rd.hint}</p>
+        <div class="controls-row">
+          <button class="btn-ghost" onclick="toggleStats()" style="flex:1">${showStats?'Hide':'📊'} Stats</button>
+          <button class="btn-ghost" onclick="clearSeeds()" style="flex:1">Clear</button>
+          <button class="btn-action ${ready?'':'disabled'}" onclick="launchCascade()" style="flex:2">🚀 Launch</button>
+        </div>
+        ${showStats ? renderStats() : ''}
+      </div>`;
+  } else if (phase === 'simulating') {
+    area.innerHTML = `<div style="text-align:center;padding:16px;color:var(--accent);font-size:14px;font-weight:700" class="mono">⏳ Step ${animStep}…</div>`;
+  } else if (phase === 'result') {
+    const t = result.total;
+    const tier = t >= 30 ? 'great' : t >= 18 ? 'good' : 'low';
+    const best = bestScores[currentRound];
+    const isNewBest = best !== null && t > best;
+    const isBest = best === null || t >= best;
+    const verdict = t >= 35 ? '🏆 Outstanding!' : t >= 28 ? '🔥 Excellent!' : t >= 18 ? '👍 Solid — retry to improve?' : '🤔 Try a different strategy!';
+    const isLast = currentRound === 2;
+
+    area.innerHTML = `
+      <div class="result-card ${tier}">
+        <div class="result-score mono">${t}<span>/50</span></div>
+        <div class="result-detail">Reached in ${result.maxStep} steps · Seeds: [${seeds.join(', ')}] · Cost: ${budgetUsed()}¢</div>
+        <div class="result-verdict" style="color:var(${tier==='great'?'--success':tier==='good'?'--accent':'--infected'})">${verdict}</div>
+        ${isNewBest ? `<div style="color:var(--seed);font-size:12px;font-weight:700;margin-top:4px">⭐ New best! (was ${best})</div>` : ''}
+        ${!isBest ? `<div style="color:var(--muted);font-size:12px;margin-top:4px">Best remains ${best}/50</div>` : ''}
+      </div>
+      <div class="controls-row" style="margin-bottom:8px">
+        <button class="btn-retry" onclick="retryRound()" style="flex:1">🔄 Retry Round ${currentRound+1}</button>
+        <button class="btn-action" onclick="${isLast?'showFinal()':'nextRound()'}" style="flex:1">${isLast?'🏆 Finish':'→ Round '+(currentRound+2)}</button>
+      </div>
+      <p class="hint">Retry to improve your score, or move on. Your <strong style="color:var(--seed)">best score</strong> per round counts.</p>`;
+  }
+}
+
+function renderStats() {
+  const byDeg = [...NET.nodes].sort((a,b)=>b.degree-a.degree).slice(0,6);
+  const byBtw = [...NET.nodes].sort((a,b)=>b.betweenness-a.betweenness).slice(0,6);
+  return `<div class="card" style="margin-top:6px;font-size:11px;line-height:1.6">
+    <div class="mono" style="color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;font-size:10px">Network Info</div>
+    <div style="color:var(--muted)"><strong style="color:var(--text)">Top degree:</strong> ${byDeg.map(n=>`<span style="color:${n.comColor}">${n.id}</span>(d=${n.degree}, ${nodeCost(n)}¢)`).join(', ')}</div>
+    <div style="color:var(--muted);margin-top:3px"><strong style="color:var(--text)">Top betweenness:</strong> ${byBtw.map(n=>`<span style="color:${n.comColor}">${n.id}</span>(btw=${n.betweenness.toFixed(0)}, ${nodeCost(n)}¢)`).join(', ')}</div>
+    <div style="color:var(--muted);margin-top:6px;font-size:10px">Departments: <span style="color:var(--community-a)">■ Engineering</span> <span style="color:var(--community-b)">■ Marketing</span> <span style="color:var(--community-c)">■ Sales</span> <span style="color:var(--community-d)">■ Design</span></div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ACTIONS
+// ═══════════════════════════════════════════════════════════════
+function startRound() { phase='round-intro'; currentRound=0; currentAttempt=0; render(); }
+function beginSelect() { phase='select'; seeds=[]; result=null; animStep=-1; showStats=false; render(); }
+
+function handleNodeClick(id) {
+  if (phase !== 'select') return;
+  if (seeds.includes(id)) { seeds = seeds.filter(s => s !== id); }
+  else if (budgetLeft() >= nodeCost(NET.nodes[id])) { seeds.push(id); }
+  renderNetwork();
+  renderControls();
+  const bd = document.querySelector('.budget-display .coins');
+  if (bd) bd.textContent = '💰 ' + budgetLeft();
+  const ib = document.querySelector('.info-bar');
+  if (ib) ib.innerHTML = `
+    <div class="info-chip"><strong>${seeds.length}</strong> seeds</div>
+    <div class="info-chip">Budget: <strong>${budgetLeft()}</strong>¢</div>
+    ${seeds.length ? `<div class="info-chip warn">Spent: ${budgetUsed()}¢</div>` : ''}`;
+}
+
+function clearSeeds() { seeds=[]; render(); }
+function toggleStats() { showStats=!showStats; renderControls(); }
+
+function launchCascade() {
+  if (seeds.length===0 || budgetLeft()<0) return;
+  phase='simulating'; animStep=0;
+  result = runDiffusion(NET, seeds, currentRound);
+  render();
+  let step=0;
+  animInterval = setInterval(() => {
+    step++; animStep=step;
+    renderNetwork();
+    const sim = document.getElementById('controlsArea');
+    if (sim && phase==='simulating') sim.innerHTML = `<div style="text-align:center;padding:16px;color:var(--accent);font-size:14px;font-weight:700" class="mono">⏳ Step ${step}…</div>`;
+    if (step > result.maxStep) {
+      clearInterval(animInterval);
+      phase='result';
+      // Update best
+      if (bestScores[currentRound]===null || result.total > bestScores[currentRound]) {
+        bestScores[currentRound] = result.total;
+        bestSeeds[currentRound] = [...seeds];
+      }
+      currentAttempt++;
+      render();
+    }
+  }, 400);
+}
+
+function retryRound() { seeds=[]; result=null; animStep=-1; phase='select'; showStats=false; render(); }
+function nextRound() { currentRound++; currentAttempt=0; phase='round-intro'; render(); }
+function showFinal() { phase='final'; render(); }
+
+function submitFinalScore() {
+  const inp = document.getElementById('nameInput');
+  const name = (inp?inp.value:'').trim();
+  if (!name) return;
+  const total = bestScores.reduce((a,b)=>a+(b||0),0);
+  leaderboard.push({ name, total, rounds:[...bestScores], ts:Date.now() });
+  localStorage.setItem('seeding-lb-v3', JSON.stringify(leaderboard));
+  render();
+}
+
+function clearLB() { leaderboard=[]; localStorage.removeItem('seeding-lb-v3'); render(); }
+function resetAll() { currentRound=0; seeds=[]; result=null; animStep=-1; bestScores=[null,null,null]; bestSeeds=[null,null,null]; currentAttempt=0; phase='intro'; render(); }
+
+render();
+</script>
+</body>
+</html>
